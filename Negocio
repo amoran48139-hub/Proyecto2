@@ -1,0 +1,139 @@
+using System;
+using System.Linq;
+
+namespace AmbulanciasMX
+{
+    public class TarifaService
+    {
+        private const decimal TARIFA_BASE_RENTA_MES = 45000m;
+        private const decimal TARIFA_BASE_TRASLADO = 1500m;
+        private const decimal TARIFA_BASE_EMERGENCIA = 2000m;
+        private const decimal COSTO_POR_KM = 25m;
+
+        public decimal CalcularTarifa(TipoServicio tipo, GravedadPaciente gravedad, double distanciaKm, int mesesRenta)
+        {
+            decimal multiplicador = ObtenerMultiplicador(gravedad);
+            return tipo switch
+            {
+                TipoServicio.RentaMensual => CalcularRenta(mesesRenta),
+                TipoServicio.Traslado => (TARIFA_BASE_TRASLADO + (decimal)distanciaKm * COSTO_POR_KM) * multiplicador,
+                TipoServicio.EmergenciaInmediata => (TARIFA_BASE_EMERGENCIA + (decimal)distanciaKm * (COSTO_POR_KM * 1.5m) + 800m) * multiplicador,
+                _ => 0m
+            };
+        }
+
+        private decimal CalcularRenta(int meses)
+        {
+            int mesesReales = meses < 1 ? 1 : meses;
+            decimal descuento = mesesReales >= 3 ? 0.90m : 1m;
+            return TARIFA_BASE_RENTA_MES * mesesReales * descuento;
+        }
+
+        private decimal ObtenerMultiplicador(GravedadPaciente g) => g switch
+        {
+            GravedadPaciente.Leve => 1.0m,
+            GravedadPaciente.Moderada => 1.2m,
+            GravedadPaciente.Grave => 1.5m,
+            GravedadPaciente.Critica => 2.0m,
+            _ => 1.0m
+        };
+    }
+
+    public class DisponibilidadService
+    {
+        private readonly RepositorioAmbulancias _repo;
+        private static readonly Random _random = new Random();
+        private static readonly string[] _modelos = {
+            "Mercedes Sprinter 2023", "Ford Transit 2022", "Nissan NV350 2021",
+            "Chevrolet Express 2023", "Mercedes Sprinter 2024", "Ford Transit 2023",
+            "Nissan NV350 2022", "RAM ProMaster 2023"
+        };
+
+        public DisponibilidadService(RepositorioAmbulancias repo) { _repo = repo; }
+
+        public void SembrarSiEsNecesario()
+        {
+            if (_repo.ObtenerTodos().Count > 0) return;
+
+            for (int i = 0; i < 8; i++)
+            {
+                var estado = ObtenerEstadoAleatorio();
+                DateTime? ocupadaHasta = estado == EstadoAmbulancia.Disponible
+                    ? null
+                    : DateTime.Now.AddDays(_random.Next(1, 21));
+
+                _repo.Agregar(new Ambulancia
+                {
+                    Placas = $"AMB-{_random.Next(100, 999)}-{(char)('A' + _random.Next(0, 26))}",
+                    Modelo = _modelos[i],
+                    Anio = 2021 + _random.Next(0, 4),
+                    Estado = estado,
+                    OcupadaHasta = ocupadaHasta
+                });
+            }
+        }
+
+        public void ActualizarDisponibilidad()
+        {
+            foreach (var a in _repo.ObtenerTodos())
+            {
+                if (a.Estado != EstadoAmbulancia.Disponible && a.OcupadaHasta.HasValue && a.OcupadaHasta < DateTime.Now)
+                {
+                    a.Estado = EstadoAmbulancia.Disponible;
+                    a.OcupadaHasta = null;
+                    _repo.Actualizar(a);
+                }
+            }
+        }
+
+        private EstadoAmbulancia ObtenerEstadoAleatorio()
+        {
+            int v = _random.Next(0, 100);
+            if (v < 60) return EstadoAmbulancia.Disponible;
+            if (v < 90) return EstadoAmbulancia.Ocupada;
+            return EstadoAmbulancia.Mantenimiento;
+        }
+    }
+
+    public class ServicioService
+    {
+        private readonly RepositorioServicios _repoServicios;
+        private readonly RepositorioAmbulancias _repoAmbulancias;
+        private readonly TarifaService _tarifaService;
+
+        public ServicioService(RepositorioServicios repoServicios, RepositorioAmbulancias repoAmbulancias, TarifaService tarifaService)
+        {
+            _repoServicios = repoServicios;
+            _repoAmbulancias = repoAmbulancias;
+            _tarifaService = tarifaService;
+        }
+
+        public (bool exito, string mensaje, Servicio? servicio) Solicitar(Servicio nuevo)
+        {
+            var disponibles = _repoAmbulancias.ObtenerTodos().Where(a => a.Estado == EstadoAmbulancia.Disponible).ToList();
+            if (disponibles.Count == 0)
+                return (false, "No hay ambulancias disponibles en este momento.", null);
+
+            var unidad = disponibles.First();
+            nuevo.TarifaTotal = _tarifaService.CalcularTarifa(nuevo.Tipo, nuevo.Gravedad, nuevo.DistanciaKm, nuevo.MesesRenta);
+            nuevo.AmbulanciaId = unidad.Id;
+            nuevo.FechaSolicitud = DateTime.Now;
+
+            unidad.Estado = EstadoAmbulancia.Ocupada;
+            unidad.OcupadaHasta = nuevo.Tipo switch
+            {
+                TipoServicio.RentaMensual => DateTime.Now.AddMonths(Math.Max(1, nuevo.MesesRenta)),
+                TipoServicio.EmergenciaInmediata => DateTime.Now.AddHours(3),
+                _ => DateTime.Now.AddHours(12)
+            };
+
+            _repoAmbulancias.Actualizar(unidad);
+            _repoServicios.Agregar(nuevo);
+
+            return (true, $"Servicio asignado a la unidad {unidad.Placas}.", nuevo);
+        }
+    }
+}
+
+
+
