@@ -1,0 +1,93 @@
+using System;
+
+namespace AmbulanciasMX
+{
+    class Program
+    {
+        static void Main()
+        {
+            BaseDatos.Inicializar();
+
+            var repoAmbulancias = new RepositorioAmbulancias();
+            var repoServicios = new RepositorioServicios();
+            var tarifaService = new TarifaService();
+            var disponibilidadService = new DisponibilidadService(repoAmbulancias);
+            var servicioService = new ServicioService(repoServicios, repoAmbulancias, tarifaService);
+
+            disponibilidadService.SembrarSiEsNecesario();
+
+            bool salir = false;
+            while (!salir)
+            {
+                disponibilidadService.ActualizarDisponibilidad();
+                Vista.MostrarMenu();
+                var opcion = Console.ReadLine();
+
+                switch (opcion)
+                {
+                    case "1":
+                        Vista.MostrarFlotilla(repoAmbulancias.ObtenerTodos());
+                        break;
+                    case "2":
+                        SolicitarServicio(servicioService);
+                        break;
+                    case "3":
+                        Vista.MostrarHistorial(repoServicios.ObtenerTodos());
+                        break;
+                    case "4":
+                        salir = true;
+                        break;
+                    default:
+                        Console.WriteLine("Opcion invalida.");
+                        break;
+                }
+            }
+        }
+
+        static void SolicitarServicio(ServicioService servicioService)
+        {
+            var nuevo = new Servicio();
+
+            Console.Write("Nombre del cliente: ");
+            nuevo.NombreCliente = Console.ReadLine() ?? "";
+
+            Console.WriteLine("Tipo de servicio: 1) Renta mensual  2) Traslado  3) Emergencia inmediata");
+            nuevo.Tipo = Console.ReadLine() switch
+            {
+                "1" => TipoServicio.RentaMensual,
+                "2" => TipoServicio.Traslado,
+                _ => TipoServicio.EmergenciaInmediata
+            };
+
+            Console.WriteLine("Gravedad: 1) Leve  2) Moderada  3) Grave  4) Critica");
+            nuevo.Gravedad = Console.ReadLine() switch
+            {
+                "1" => GravedadPaciente.Leve,
+                "2" => GravedadPaciente.Moderada,
+                "3" => GravedadPaciente.Grave,
+                _ => GravedadPaciente.Critica
+            };
+
+            Console.Write("Ciudad de origen: ");
+            nuevo.CiudadOrigen = Console.ReadLine() ?? "";
+            Console.Write("Ciudad de destino: ");
+            nuevo.CiudadDestino = Console.ReadLine() ?? "";
+
+            Console.Write("Distancia en km: ");
+            double.TryParse(Console.ReadLine(), out double distancia);
+            nuevo.DistanciaKm = distancia;
+
+            if (nuevo.Tipo == TipoServicio.RentaMensual)
+            {
+                Console.Write("Meses de renta (minimo 1): ");
+                int.TryParse(Console.ReadLine(), out int meses);
+                nuevo.MesesRenta = meses;
+            }
+
+            var (exito, mensaje, resultado) = servicioService.Solicitar(nuevo);
+            Console.WriteLine(exito
+                ? $"\n{mensaje} Tarifa total: ${resultado!.TarifaTotal:N2} MXN"
+                : $"\n{mensaje}");
+        }
+    }
+}
