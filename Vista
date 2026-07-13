@@ -1,0 +1,39 @@
+using System;
+using System.Collections.Generic;
+
+namespace AmbulanciasMX
+{
+    public static class Vista
+    {
+        public static void MostrarMenu()
+        {
+            Console.WriteLine();
+            Console.WriteLine("===== AMBULANCIAS MX =====");
+            Console.WriteLine("1. Ver flotilla");
+            Console.WriteLine("2. Solicitar servicio");
+            Console.WriteLine("3. Ver historial");
+            Console.WriteLine("4. Salir");
+            Console.Write("Elige una opcion: ");
+        }
+
+        public static void MostrarFlotilla(List<Ambulancia> lista)
+        {
+            Console.WriteLine("\n--- Flotilla (8 unidades) ---");
+            foreach (var a in lista)
+            {
+                string libre = a.OcupadaHasta.HasValue ? $" (libre: {a.OcupadaHasta:dd/MM HH:mm})" : "";
+                Console.WriteLine($"#{a.Id} | {a.Placas} | {a.Modelo} | Estado: {a.Estado}{libre}");
+            }
+        }
+
+        public static void MostrarHistorial(List<Servicio> lista)
+        {
+            Console.WriteLine("\n--- Historial de servicios ---");
+            if (lista.Count == 0) { Console.WriteLine("(vacio)"); return; }
+            foreach (var s in lista)
+            {
+                Console.WriteLine($"#{s.Id} | {s.NombreCliente} | {s.Tipo} | Gravedad: {s.Gravedad} | Unidad: {s.AmbulanciaId} | ${s.TarifaTotal:N2} MXN");
+            }
+        }
+    }
+}
