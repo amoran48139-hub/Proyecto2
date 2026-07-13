@@ -1,0 +1,168 @@
+using System;
+using System.Collections.Generic;
+using Microsoft.Data.Sqlite;
+
+namespace AmbulanciasMX
+{
+    public interface IRepositorio<T>
+    {
+        List<T> ObtenerTodos();
+        void Agregar(T entidad);
+        void Actualizar(T entidad);
+    }
+
+    public static class BaseDatos
+    {
+        public const string CadenaConexion = "Data Source=ambulancias.db";
+
+        public static void Inicializar()
+        {
+            using var conexion = new SqliteConnection(CadenaConexion);
+            conexion.Open();
+            var cmd = conexion.CreateCommand();
+            cmd.CommandText = @"
+                CREATE TABLE IF NOT EXISTS Ambulancias (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Placas TEXT NOT NULL,
+                    Modelo TEXT NOT NULL,
+                    Anio INTEGER NOT NULL,
+                    Estado TEXT NOT NULL,
+                    OcupadaHasta TEXT
+                );
+                CREATE TABLE IF NOT EXISTS Servicios (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Tipo TEXT NOT NULL,
+                    AmbulanciaId INTEGER NOT NULL,
+                    NombreCliente TEXT NOT NULL,
+                    Gravedad TEXT NOT NULL,
+                    DistanciaKm REAL NOT NULL,
+                    CiudadOrigen TEXT,
+                    CiudadDestino TEXT,
+                    MesesRenta INTEGER,
+                    FechaSolicitud TEXT NOT NULL,
+                    TarifaTotal REAL NOT NULL,
+                    Notas TEXT
+                );";
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    public class RepositorioAmbulancias : IRepositorio<Ambulancia>
+    {
+        public List<Ambulancia> ObtenerTodos()
+        {
+            var lista = new List<Ambulancia>();
+            using var conexion = new SqliteConnection(BaseDatos.CadenaConexion);
+            conexion.Open();
+            var cmd = conexion.CreateCommand();
+            cmd.CommandText = "SELECT Id, Placas, Modelo, Anio, Estado, OcupadaHasta FROM Ambulancias ORDER BY Id";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                lista.Add(new Ambulancia
+                {
+                    Id = reader.GetInt32(0),
+                    Placas = reader.GetString(1),
+                    Modelo = reader.GetString(2),
+                    Anio = reader.GetInt32(3),
+                    Estado = Enum.Parse<EstadoAmbulancia>(reader.GetString(4)),
+                    OcupadaHasta = reader.IsDBNull(5) ? null : DateTime.Parse(reader.GetString(5))
+                });
+            }
+            return lista;
+        }
+
+        public void Agregar(Ambulancia a)
+        {
+            using var conexion = new SqliteConnection(BaseDatos.CadenaConexion);
+            conexion.Open();
+            var cmd = conexion.CreateCommand();
+            cmd.CommandText = @"INSERT INTO Ambulancias (Placas, Modelo, Anio, Estado, OcupadaHasta)
+                                 VALUES ($placas, $modelo, $anio, $estado, $ocupadaHasta)";
+            cmd.Parameters.AddWithValue("$placas", a.Placas);
+            cmd.Parameters.AddWithValue("$modelo", a.Modelo);
+            cmd.Parameters.AddWithValue("$anio", a.Anio);
+            cmd.Parameters.AddWithValue("$estado", a.Estado.ToString());
+            cmd.Parameters.AddWithValue("$ocupadaHasta", (object?)a.OcupadaHasta?.ToString("o") ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        }
+
+        public void Actualizar(Ambulancia a)
+        {
+            using var conexion = new SqliteConnection(BaseDatos.CadenaConexion);
+            conexion.Open();
+            var cmd = conexion.CreateCommand();
+            cmd.CommandText = "UPDATE Ambulancias SET Estado = $estado, OcupadaHasta = $ocupadaHasta WHERE Id = $id";
+            cmd.Parameters.AddWithValue("$estado", a.Estado.ToString());
+            cmd.Parameters.AddWithValue("$ocupadaHasta", (object?)a.OcupadaHasta?.ToString("o") ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$id", a.Id);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    public class RepositorioServicios : IRepositorio<Servicio>
+    {
+        public List<Servicio> ObtenerTodos()
+        {
+            var lista = new List<Servicio>();
+            using var conexion = new SqliteConnection(BaseDatos.CadenaConexion);
+            conexion.Open();
+            var cmd = conexion.CreateCommand();
+            cmd.CommandText = "SELECT Id, Tipo, AmbulanciaId, NombreCliente, Gravedad, DistanciaKm, CiudadOrigen, CiudadDestino, MesesRenta, FechaSolicitud, TarifaTotal, Notas FROM Servicios ORDER BY Id DESC";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                lista.Add(new Servicio
+                {
+                    Id = reader.GetInt32(0),
+                    Tipo = Enum.Parse<TipoServicio>(reader.GetString(1)),
+                    AmbulanciaId = reader.GetInt32(2),
+                    NombreCliente = reader.GetString(3),
+                    Gravedad = Enum.Parse<GravedadPaciente>(reader.GetString(4)),
+                    DistanciaKm = reader.GetDouble(5),
+                    CiudadOrigen = reader.IsDBNull(6) ? "" : reader.GetString(6),
+                    CiudadDestino = reader.IsDBNull(7) ? "" : reader.GetString(7),
+                    MesesRenta = reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
+                    FechaSolicitud = DateTime.Parse(reader.GetString(9)),
+                    TarifaTotal = (decimal)reader.GetDouble(10),
+                    Notas = reader.IsDBNull(11) ? "" : reader.GetString(11)
+                });
+            }
+            return lista;
+        }
+
+        public void Agregar(Servicio s)
+        {
+            using var conexion = new SqliteConnection(BaseDatos.CadenaConexion);
+            conexion.Open();
+            var cmd = conexion.CreateCommand();
+            cmd.CommandText = @"INSERT INTO Servicios
+                (Tipo, AmbulanciaId, NombreCliente, Gravedad, DistanciaKm, CiudadOrigen, CiudadDestino, MesesRenta, FechaSolicitud, TarifaTotal, Notas)
+                VALUES ($tipo, $ambId, $cliente, $gravedad, $distancia, $origen, $destino, $meses, $fecha, $tarifa, $notas);
+                SELECT last_insert_rowid();";
+            cmd.Parameters.AddWithValue("$tipo", s.Tipo.ToString());
+            cmd.Parameters.AddWithValue("$ambId", s.AmbulanciaId);
+            cmd.Parameters.AddWithValue("$cliente", s.NombreCliente);
+            cmd.Parameters.AddWithValue("$gravedad", s.Gravedad.ToString());
+            cmd.Parameters.AddWithValue("$distancia", s.DistanciaKm);
+            cmd.Parameters.AddWithValue("$origen", s.CiudadOrigen);
+            cmd.Parameters.AddWithValue("$destino", s.CiudadDestino);
+            cmd.Parameters.AddWithValue("$meses", s.MesesRenta);
+            cmd.Parameters.AddWithValue("$fecha", s.FechaSolicitud.ToString("o"));
+            cmd.Parameters.AddWithValue("$tarifa", (double)s.TarifaTotal);
+            cmd.Parameters.AddWithValue("$notas", s.Notas);
+            s.Id = Convert.ToInt32(cmd.ExecuteScalar());
+        }
+
+        public void Actualizar(Servicio s)
+        {
+            using var conexion = new SqliteConnection(BaseDatos.CadenaConexion);
+            conexion.Open();
+            var cmd = conexion.CreateCommand();
+            cmd.CommandText = "UPDATE Servicios SET Notas = $notas WHERE Id = $id";
+            cmd.Parameters.AddWithValue("$notas", s.Notas);
+            cmd.Parameters.AddWithValue("$id", s.Id);
+            cmd.ExecuteNonQuery();
+        }
+    }
+}
