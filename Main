@@ -1,0 +1,34 @@
+using System;
+
+namespace AmbulanciasMX
+{
+    public enum EstadoAmbulancia { Disponible, Ocupada, Mantenimiento }
+    public enum TipoServicio { RentaMensual, Traslado, EmergenciaInmediata }
+    public enum GravedadPaciente { Leve = 1, Moderada = 2, Grave = 3, Critica = 4 }
+
+    public class Ambulancia
+    {
+        public int Id { get; set; }
+        public string Placas { get; set; } = "";
+        public string Modelo { get; set; } = "";
+        public int Anio { get; set; }
+        public EstadoAmbulancia Estado { get; set; }
+        public DateTime? OcupadaHasta { get; set; }
+    }
+
+    public class Servicio
+    {
+        public int Id { get; set; }
+        public TipoServicio Tipo { get; set; }
+        public int AmbulanciaId { get; set; }
+        public string NombreCliente { get; set; } = "";
+        public GravedadPaciente Gravedad { get; set; }
+        public double DistanciaKm { get; set; }
+        public string CiudadOrigen { get; set; } = "";
+        public string CiudadDestino { get; set; } = "";
+        public int MesesRenta { get; set; }
+        public DateTime FechaSolicitud { get; set; } = DateTime.Now;
+        public decimal TarifaTotal { get; set; }
+        public string Notas { get; set; } = "";
+    }
+}
